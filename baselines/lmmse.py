@@ -35,10 +35,6 @@ class LMMSEEstimator:
         R_hh: Optional[np.ndarray] = None,
         mu_h: Optional[np.ndarray] = None
     ) -> np.ndarray:
-        """
-        Estimates full communication channel matrix H_c from noisy observations Y_obs.
-        Uses centered Rician LMMSE estimation: H_hat = mu + C_hp (C_pp + sigma2 * I)^(-1) (Y_p - mu_p)
-        """
         if hasattr(Y_obs, "cpu"):
             Y_obs = Y_obs.cpu().numpy()
             
@@ -48,27 +44,34 @@ class LMMSEEstimator:
         snr_linear = 10.0 ** (snr_db / 10.0)
         sigma2 = 1.0 / snr_linear
         
-        # LS estimate on pilot subcarriers
-        Y_pilots = Y_obs[..., self.pilot_subcarriers, :] # (..., Nr, Nt, num_pilots, T)
+        Y_pilots = Y_obs[..., self.pilot_subcarriers, :] # (..., num_pilots, T)
         
         if R_hh is None:
-            # Empirical / Sinc autocorrelation profile
             k = np.arange(self.Nc)
             dk = np.abs(k[:, None] - k[None, :])
             R_hh = np.sinc(dk * 0.05) + 1e-4 * np.eye(self.Nc)
 
-        # Centered LMMSE matrix
         R_p = R_hh[self.pilot_subcarriers, :][:, self.pilot_subcarriers]
         R_hp = R_hh[:, self.pilot_subcarriers]
         
-        # Pilot symbol energy scaling factor
         inv_matrix = np.linalg.inv(R_p + sigma2 * np.eye(self.num_pilots))
         W_lmmse = R_hp @ inv_matrix
         
         if mu_h is not None:
-            mu_p = mu_h[..., self.pilot_subcarriers, :]
+            mu_h_np = np.asarray(mu_h)
+            # Take subcarrier slice at dim -2
+            subcarrier_slice = [slice(None)] * mu_h_np.ndim
+            subcarrier_slice[-2] = self.pilot_subcarriers
+            mu_p = mu_h_np[tuple(subcarrier_slice)]
+            
+            # Align batch dimensions
+            while mu_p.ndim < Y_pilots.ndim:
+                mu_p = np.expand_dims(mu_p, axis=0)
+            while mu_h_np.ndim < Y_obs.ndim:
+                mu_h_np = np.expand_dims(mu_h_np, axis=0)
+                
             diff = Y_pilots - mu_p
-            H_lmmse = mu_h + np.einsum('kp, ...npt->...nkt', W_lmmse, diff)
+            H_lmmse = mu_h_np + np.einsum('kp, ...npt->...nkt', W_lmmse, diff)
         else:
             H_lmmse = np.einsum('kp, ...npt->...nkt', W_lmmse, Y_pilots)
             

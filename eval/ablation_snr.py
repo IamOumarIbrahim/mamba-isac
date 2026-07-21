@@ -7,6 +7,7 @@ import yaml
 import torch
 import numpy as np
 
+from data.comm_channel import CommunicationChannelGenerator
 from data.dataset import generate_isac_samples, ISACDataset
 from models.mamba_isac import MambaISAC
 from baselines.transformer_isac import TransformerISAC
@@ -26,6 +27,21 @@ def run_snr_ablation(config_path: str = "configs/default_config.yaml"):
     
     snr_list_db = [-10, -5, 0, 5, 10, 15, 20, 25, 30]
     
+    # Pre-generate channel samples to compute empirical mean and covariance for Centered LMMSE
+    comm_gen = CommunicationChannelGenerator(
+        num_subcarriers=config['dataset']['num_subcarriers'],
+        num_time_slots=config['dataset']['num_time_slots'],
+        num_tx_antennas=config['dataset']['num_tx_antennas'],
+        num_rx_antennas=config['dataset']['num_rx_antennas'],
+        k_factor_db=config['comm_channel']['k_factor_db'],
+        user_velocity=config['comm_channel']['user_velocity']
+    )
+    H_c_all, _ = comm_gen.generate_channel(batch_size=1000, snr_db=None)
+    mu_h = np.mean(H_c_all, axis=0)
+    Nc = config['dataset']['num_subcarriers']
+    H_flat = (H_c_all - mu_h).transpose(0, 1, 2, 4, 3).reshape(-1, Nc)
+    C_hh = (H_flat.conj().T @ H_flat) / H_flat.shape[0]
+    
     results = []
     print("\nStarting Ablation 4: Matched SNR Sweeps (-10 dB to +30 dB)...")
     
@@ -36,14 +52,15 @@ def run_snr_ablation(config_path: str = "configs/default_config.yaml"):
         test_dict = generate_isac_samples(config_snr, num_samples=50, seed=42)
         test_ds = ISACDataset(test_dict)
         
-        # 1. LMMSE
+        # 1. Centered LMMSE
         lmmse = LMMSEEstimator(
             num_subcarriers=config_snr['dataset']['num_subcarriers'],
             num_time_slots=config_snr['dataset']['num_time_slots'],
             pilot_spacing=config_snr['pilots']['pilot_spacing']
         )
-        H_lmmse = lmmse.estimate_comm_channel(test_dict['Y_obs'], snr_db=float(snr_db))
-        R_lmmse, nu_lmmse = lmmse.estimate_sensing_parameters(test_dict['Y_obs'], H_c_est=H_lmmse, snr_db=float(snr_db))
+        Y_obs_complex = test_dict['Y_obs']
+        H_lmmse = lmmse.estimate_comm_channel(Y_obs_complex, snr_db=float(snr_db), R_hh=C_hh, mu_h=mu_h)
+        R_lmmse, nu_lmmse = lmmse.estimate_sensing_parameters(Y_obs_complex, H_c_est=H_lmmse, snr_db=float(snr_db))
         
         nmse_lmmse = compute_nmse_db(H_lmmse, test_dict['H_c'])
         r_rmse_lmmse = compute_rmse(R_lmmse, test_dict['range'])
@@ -51,7 +68,7 @@ def run_snr_ablation(config_path: str = "configs/default_config.yaml"):
         # 2. Transformer
         trans_model = TransformerISAC(config_snr).to(device)
         if os.path.exists(trans_ckpt):
-            ckpt = torch.load(trans_ckpt, map_location=device)
+            ckpt = torch.load(trans_ckpt, map_location=device, weights_only=False)
             trans_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         trans_model.eval()
         Y_obs = test_ds.Y_obs.to(device)
@@ -69,7 +86,7 @@ def run_snr_ablation(config_path: str = "configs/default_config.yaml"):
         # 3. Mamba-ISAC
         mamba_model = MambaISAC(config_snr).to(device)
         if os.path.exists(mamba_ckpt):
-            ckpt = torch.load(mamba_ckpt, map_location=device)
+            ckpt = torch.load(mamba_ckpt, map_location=device, weights_only=False)
             mamba_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         mamba_model.eval()
         with torch.no_grad():
