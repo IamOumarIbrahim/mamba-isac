@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 from baselines.lmmse import LMMSEEstimator
 from data.comm_channel import CommunicationChannelGenerator
+from data.sensing_channel import SensingChannelGenerator
 from utils.seed import set_seed
 
 def test_lmmse_estimation_and_nmse():
@@ -26,6 +27,21 @@ def test_lmmse_estimation_and_nmse():
     assert H_lmmse.shape == H_c.shape
     
     nmse_lmmse = LMMSEEstimator.compute_nmse(H_lmmse, H_c)
-    
-    # NMSE should be low at 15 dB SNR (< -10 dB)
     assert nmse_lmmse < -10.0
+
+def test_lmmse_sensing_recovery():
+    set_seed(42)
+    Nc, T = 64, 32
+    lmmse = LMMSEEstimator(num_subcarriers=Nc, num_time_slots=T)
+    sens_gen = SensingChannelGenerator(num_subcarriers=Nc, num_time_slots=T)
+    
+    target_r = 75.0
+    target_v = 15.0
+    
+    y_s, tau, nu_s = sens_gen.generate_echo(range_m=target_r, velocity_ms=target_v)
+    Y_obs = y_s[None, ...] # (1, Nr, Nt, Nc, T)
+    
+    R_hat, nu_s_hat = lmmse.estimate_sensing_parameters(Y_obs)
+    
+    np.testing.assert_allclose(R_hat[0], target_r, atol=2.0)
+    np.testing.assert_allclose(nu_s_hat[0], nu_s, atol=20.0)
