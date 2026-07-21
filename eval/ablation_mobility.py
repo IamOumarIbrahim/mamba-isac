@@ -21,6 +21,9 @@ def run_mobility_ablation(config_path: str = "configs/default_config.yaml"):
     set_seed(42)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    mamba_ckpt = "checkpoints/best_mamba_isac.pt"
+    trans_ckpt = "checkpoints/best_transformer_isac.pt"
+    
     velocities_ms = [5.0, 15.0, 30.0, 60.0, 120.0]
     
     results = []
@@ -44,6 +47,9 @@ def run_mobility_ablation(config_path: str = "configs/default_config.yaml"):
         
         # 2. Transformer
         trans_model = TransformerISAC(config_v).to(device)
+        if os.path.exists(trans_ckpt):
+            ckpt = torch.load(trans_ckpt, map_location=device)
+            trans_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         trans_model.eval()
         Y_obs = test_ds.Y_obs.to(device)
         with torch.no_grad():
@@ -58,6 +64,9 @@ def run_mobility_ablation(config_path: str = "configs/default_config.yaml"):
         
         # 3. Mamba-ISAC
         mamba_model = MambaISAC(config_v).to(device)
+        if os.path.exists(mamba_ckpt):
+            ckpt = torch.load(mamba_ckpt, map_location=device)
+            mamba_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         mamba_model.eval()
         with torch.no_grad():
             H_c_hat_mamba, _, _ = mamba_model(Y_obs)

@@ -21,6 +21,9 @@ def run_sequence_length_ablation(config_path: str = "configs/default_config.yaml
     set_seed(42)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    mamba_ckpt = "checkpoints/best_mamba_isac.pt"
+    trans_ckpt = "checkpoints/best_transformer_isac.pt"
+    
     seq_lengths = [4, 8, 16, 32, 64]
     
     results = []
@@ -45,6 +48,9 @@ def run_sequence_length_ablation(config_path: str = "configs/default_config.yaml
         
         # 2. Transformer
         trans_model = TransformerISAC(config_t).to(device)
+        if os.path.exists(trans_ckpt):
+            ckpt = torch.load(trans_ckpt, map_location=device)
+            trans_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         trans_model.eval()
         Y_obs = test_ds.Y_obs.to(device)
         with torch.no_grad():
@@ -60,6 +66,9 @@ def run_sequence_length_ablation(config_path: str = "configs/default_config.yaml
         
         # 3. Mamba-ISAC
         mamba_model = MambaISAC(config_t).to(device)
+        if os.path.exists(mamba_ckpt):
+            ckpt = torch.load(mamba_ckpt, map_location=device)
+            mamba_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         mamba_model.eval()
         with torch.no_grad():
             H_c_hat_mamba, _, _ = mamba_model(Y_obs)
@@ -74,11 +83,11 @@ def run_sequence_length_ablation(config_path: str = "configs/default_config.yaml
         results.append({
             'T': T_len,
             'LMMSE_NMSE': nmse_lmmse, 'LMMSE_Lat_ms': lat_lmmse,
-            'Transformer_NMSE': nmse_trans, 'Transformer_Lat_ms': lat_lat_trans := lat_trans,
+            'Transformer_NMSE': nmse_trans, 'Transformer_Lat_ms': lat_trans,
             'Mamba_NMSE': nmse_mamba, 'Mamba_Lat_ms': lat_mamba
         })
         
-        print(f"T={T_len:2d} | LMMSE Lat: {lat_lmmse:.2f} ms | Trans Lat: {lat_trans:.2f} ms | Mamba Lat: {lat_mamba:.2f} ms")
+        print(f"T={T_len:2d} | LMMSE NMSE: {nmse_lmmse:.2f} dB | Trans NMSE: {nmse_trans:.2f} dB | Mamba NMSE: {nmse_mamba:.2f} dB")
         
     os.makedirs("results", exist_ok=True)
     csv_path = "results/ablation_seq_length.csv"

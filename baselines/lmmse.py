@@ -4,7 +4,7 @@ from typing import Tuple, Optional
 class LMMSEEstimator:
     """
     Closed-form Linear Minimum Mean-Squared Error (LMMSE) channel estimator
-    extended with 2D FFT matched-filtering for sensing range and Doppler recovery.
+    extended with communication channel cancellation + 2D FFT periodogram for target range and Doppler recovery.
     Pure closed-form estimator with zero learned parameters.
     """
     def __init__(
@@ -34,22 +34,16 @@ class LMMSEEstimator:
         snr_db: float,
         R_hh: Optional[np.ndarray] = None
     ) -> np.ndarray:
-        """
-        Estimates full communication channel matrix H_c from noisy observations Y_obs.
-        
-        Args:
-            Y_obs: (..., Nr, Nt, Nc, T) complex observation matrix
-            snr_db: Operating SNR in dB
-            R_hh: (Nc, Nc) frequency-domain covariance matrix (optional)
+        if hasattr(Y_obs, "cpu"):
+            Y_obs = Y_obs.cpu().numpy()
             
-        Returns:
-            H_lmmse: (..., Nr, Nt, Nc, T) estimated channel matrix
-        """
+        if Y_obs.ndim == 6 and Y_obs.shape[1] == 2:
+            Y_obs = Y_obs[:, 0] + 1j * Y_obs[:, 1]
+
         snr_linear = 10.0 ** (snr_db / 10.0)
         sigma2 = 1.0 / snr_linear
         
-        # LS estimate on pilot subcarriers
-        Y_pilots = Y_obs[..., self.pilot_subcarriers, :] # (..., Nr, Nt, num_pilots, T)
+        Y_pilots = Y_obs[..., self.pilot_subcarriers, :]
         H_ls = Y_pilots.copy()
         
         if R_hh is None:
@@ -66,25 +60,32 @@ class LMMSEEstimator:
         H_lmmse = np.einsum('kp, ...npt->...nkt', W_lmmse, H_ls)
         return H_lmmse
 
-    def estimate_sensing_parameters(self, Y_obs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def estimate_sensing_parameters(
+        self,
+        Y_obs: np.ndarray,
+        H_c_est: Optional[np.ndarray] = None,
+        snr_db: float = 15.0,
+        max_search_range: float = 120.0
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Estimates target range R (meters) and target Doppler shift nu_s (Hz)
-        using 2D FFT matched-filtering periodogram on observation matrix Y_obs.
-        
-        Args:
-            Y_obs: (B, Nr, Nt, Nc, T) complex observation tensor or numpy array
-            
-        Returns:
-            R_hat: (B,) array of range estimates (meters)
-            nu_s_hat: (B,) array of Doppler estimates (Hz)
+        using 2D FFT periodogram within valid range window [0, max_search_range].
         """
         if hasattr(Y_obs, "cpu"):
             Y_obs = Y_obs.cpu().numpy()
             
-        # Handle real/imag split shape (B, 2, Nr, Nt, Nc, T)
         if Y_obs.ndim == 6 and Y_obs.shape[1] == 2:
             Y_obs = Y_obs[:, 0] + 1j * Y_obs[:, 1]
             
+        if H_c_est is None:
+            H_c_est = self.estimate_comm_channel(Y_obs, snr_db=snr_db)
+        elif hasattr(H_c_est, "cpu"):
+            H_c_est = H_c_est.cpu().numpy()
+            if H_c_est.ndim == 6 and H_c_est.shape[1] == 2:
+                H_c_est = H_c_est[:, 0] + 1j * H_c_est[:, 1]
+
+        Y_residual = Y_obs - H_c_est
+        
         B = Y_obs.shape[0]
         R_hat_list = []
         nu_s_hat_list = []
@@ -93,15 +94,18 @@ class LMMSEEstimator:
         n_fft_doppler = max(self.T * 8, 512)
         doppler_freqs = np.fft.fftshift(np.fft.fftfreq(n_fft_doppler, d=self.Ts))
         
+        # Max range bin corresponding to max_search_range (120 meters)
+        max_bin = int(np.ceil((2.0 * max_search_range * n_fft_range * self.df) / self.c))
+        max_bin = min(max_bin, n_fft_range)
+        
         for b in range(B):
-            # Take average across antenna pairs
-            snapshot = Y_obs[b, 0, 0, :, :] # (Nc, T)
+            snapshot = Y_residual[b, 0, 0, :, :] # (Nc, T)
             
             delay_profile = np.fft.ifft(snapshot, n=n_fft_range, axis=0) # (n_fft_range, T)
-            rd_map = np.fft.fft(delay_profile, n=n_fft_doppler, axis=1) # (n_fft_range, n_fft_doppler)
+            rd_map = np.fft.fft(delay_profile, n=n_fft_doppler, axis=1)   # (n_fft_range, n_fft_doppler)
             rd_map = np.fft.fftshift(rd_map, axes=1)
             
-            mag = np.abs(rd_map)
+            mag = np.abs(rd_map[:max_bin, :]) # Constrain peak search to valid range window
             range_bin, doppler_bin = np.unravel_index(np.argmax(mag), mag.shape)
             
             est_range = (self.c * range_bin) / (2.0 * n_fft_range * self.df)
@@ -114,6 +118,16 @@ class LMMSEEstimator:
 
     @staticmethod
     def compute_nmse(H_est: np.ndarray, H_true: np.ndarray) -> float:
+        if hasattr(H_est, "cpu"):
+            H_est = H_est.cpu().numpy()
+        if hasattr(H_true, "cpu"):
+            H_true = H_true.cpu().numpy()
+            
+        if H_est.ndim == 6 and H_est.shape[1] == 2:
+            H_est = H_est[:, 0] + 1j * H_est[:, 1]
+        if H_true.ndim == 6 and H_true.shape[1] == 2:
+            H_true = H_true[:, 0] + 1j * H_true[:, 1]
+
         error = np.sum(np.abs(H_est - H_true) ** 2)
         power = np.sum(np.abs(H_true) ** 2)
         nmse_linear = error / (power + 1e-12)

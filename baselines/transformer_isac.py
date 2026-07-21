@@ -9,7 +9,7 @@ class TransformerISAC(nn.Module):
     """
     Encoder-only Transformer baseline for joint ISAC channel and target parameter estimation.
     Uses multi-head self-attention with O(T^2) complexity, matched in parameter count to Mamba-ISAC.
-    Reuses identical dual-domain embedding and dual output heads for fair architecture-only comparison.
+    Uses residual channel estimation: H_c_hat = Y_obs + Delta_H.
     """
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
@@ -58,18 +58,12 @@ class TransformerISAC(nn.Module):
         self.sensing_head = SensingHead(d_model=self.d_model)
 
     def forward(self, Y_obs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Args:
-            Y_obs: (B, 2, Nr, Nt, Nc, T)
-        Returns:
-            H_c_hat: (B, 2, Nr, Nt, Nc, T)
-            R_hat: (B,)
-            nu_s_hat: (B,)
-        """
-        z_embed = self.embedding(Y_obs) # (B, T, d_model)
-        z_rep = self.backbone(z_embed) # (B, T, d_model)
+        z_embed = self.embedding(Y_obs)
+        z_rep = self.backbone(z_embed)
         
-        H_c_hat = self.comm_head(z_rep)
+        delta_H = self.comm_head(z_rep)
+        H_c_hat = Y_obs + delta_H
+        
         R_hat, nu_s_hat = self.sensing_head(z_rep)
         
         return H_c_hat, R_hat, nu_s_hat

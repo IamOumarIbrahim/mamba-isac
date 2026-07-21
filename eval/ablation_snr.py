@@ -21,6 +21,9 @@ def run_snr_ablation(config_path: str = "configs/default_config.yaml"):
     set_seed(42)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    mamba_ckpt = "checkpoints/best_mamba_isac.pt"
+    trans_ckpt = "checkpoints/best_transformer_isac.pt"
+    
     snr_list_db = [-10, -5, 0, 5, 10, 15, 20, 25, 30]
     
     results = []
@@ -40,13 +43,16 @@ def run_snr_ablation(config_path: str = "configs/default_config.yaml"):
             pilot_spacing=config_snr['pilots']['pilot_spacing']
         )
         H_lmmse = lmmse.estimate_comm_channel(test_dict['Y_obs'], snr_db=float(snr_db))
-        R_lmmse, nu_lmmse = lmmse.estimate_sensing_parameters(test_dict['Y_obs'])
+        R_lmmse, nu_lmmse = lmmse.estimate_sensing_parameters(test_dict['Y_obs'], H_c_est=H_lmmse, snr_db=float(snr_db))
         
         nmse_lmmse = compute_nmse_db(H_lmmse, test_dict['H_c'])
         r_rmse_lmmse = compute_rmse(R_lmmse, test_dict['range'])
         
         # 2. Transformer
         trans_model = TransformerISAC(config_snr).to(device)
+        if os.path.exists(trans_ckpt):
+            ckpt = torch.load(trans_ckpt, map_location=device)
+            trans_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         trans_model.eval()
         Y_obs = test_ds.Y_obs.to(device)
         with torch.no_grad():
@@ -62,6 +68,9 @@ def run_snr_ablation(config_path: str = "configs/default_config.yaml"):
         
         # 3. Mamba-ISAC
         mamba_model = MambaISAC(config_snr).to(device)
+        if os.path.exists(mamba_ckpt):
+            ckpt = torch.load(mamba_ckpt, map_location=device)
+            mamba_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         mamba_model.eval()
         with torch.no_grad():
             H_c_hat_mamba, R_mamba, _ = mamba_model(Y_obs)

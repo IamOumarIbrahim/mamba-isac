@@ -29,19 +29,26 @@ def test_lmmse_estimation_and_nmse():
     nmse_lmmse = LMMSEEstimator.compute_nmse(H_lmmse, H_c)
     assert nmse_lmmse < -10.0
 
-def test_lmmse_sensing_recovery():
+def test_lmmse_sensing_recovery_with_cancellation():
     set_seed(42)
-    Nc, T = 64, 32
+    Nc, T, Nt, Nr = 64, 16, 4, 4
     lmmse = LMMSEEstimator(num_subcarriers=Nc, num_time_slots=T)
-    sens_gen = SensingChannelGenerator(num_subcarriers=Nc, num_time_slots=T)
+    sens_gen = SensingChannelGenerator(num_subcarriers=Nc, num_time_slots=T, num_tx_antennas=Nt, num_rx_antennas=Nr)
+    comm_gen = CommunicationChannelGenerator(num_subcarriers=Nc, num_time_slots=T, num_tx_antennas=Nt, num_rx_antennas=Nr)
     
-    target_r = 75.0
+    target_r = 55.0
     target_v = 15.0
     
+    H_c, _ = comm_gen.generate_channel(batch_size=1, snr_db=None)
     y_s, tau, nu_s = sens_gen.generate_echo(range_m=target_r, velocity_ms=target_v)
-    Y_obs = y_s[None, ...] # (1, Nr, Nt, Nc, T)
     
-    R_hat, nu_s_hat = lmmse.estimate_sensing_parameters(Y_obs)
+    Y_obs = (H_c + y_s) # Joint observation
     
-    np.testing.assert_allclose(R_hat[0], target_r, atol=2.0)
+    # Estimate comm channel first
+    H_c_est = lmmse.estimate_comm_channel(Y_obs, snr_db=20.0)
+    
+    # Estimate sensing parameters after channel cancellation
+    R_hat, nu_s_hat = lmmse.estimate_sensing_parameters(Y_obs, H_c_est=H_c_est)
+    
+    np.testing.assert_allclose(R_hat[0], target_r, atol=2.5)
     np.testing.assert_allclose(nu_s_hat[0], nu_s, atol=20.0)

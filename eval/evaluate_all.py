@@ -21,8 +21,8 @@ def evaluate_all(config_path: str = "configs/default_config.yaml", seeds: list =
         
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Checkpoints if trained, otherwise initialized
     mamba_ckpt = "checkpoints/best_mamba_isac.pt"
+    trans_ckpt = "checkpoints/best_transformer_isac.pt"
     
     results = {}
     
@@ -48,7 +48,7 @@ def evaluate_all(config_path: str = "configs/default_config.yaml", seeds: list =
                 H_c_true = test_dict['H_c']
                 
                 H_lmmse = lmmse.estimate_comm_channel(Y_obs_complex, snr_db=config['comm_channel']['snr_db'])
-                R_hat, nu_s_hat = lmmse.estimate_sensing_parameters(Y_obs_complex)
+                R_hat, nu_s_hat = lmmse.estimate_sensing_parameters(Y_obs_complex, H_c_est=H_lmmse, snr_db=config['comm_channel']['snr_db'])
                 
                 nmse = compute_nmse_db(H_lmmse, H_c_true)
                 r_rmse = compute_rmse(R_hat, test_dict['range'])
@@ -58,12 +58,14 @@ def evaluate_all(config_path: str = "configs/default_config.yaml", seeds: list =
                     lambda x: lmmse.estimate_comm_channel(x, snr_db=15.0),
                     Y_obs_complex[:1]
                 )
-                
                 params = 0
                 flops = config['dataset']['num_subcarriers'] ** 3
                 
             elif method_name == "Transformer":
                 model = TransformerISAC(config).to(device)
+                if os.path.exists(trans_ckpt):
+                    ckpt = torch.load(trans_ckpt, map_location=device)
+                    model.load_state_dict(ckpt['model_state_dict'])
                 model.eval()
                 
                 Y_obs = test_ds.Y_obs.to(device)
@@ -72,7 +74,6 @@ def evaluate_all(config_path: str = "configs/default_config.yaml", seeds: list =
                     
                 H_c_true = test_ds.H_c.numpy()
                 H_c_hat_np = H_c_hat.cpu().numpy()
-                # Reconstruct complex matrix
                 H_c_hat_complex = H_c_hat_np[:, 0] + 1j * H_c_hat_np[:, 1]
                 H_c_true_complex = H_c_true[:, 0] + 1j * H_c_true[:, 1]
                 
@@ -138,7 +139,6 @@ def evaluate_all(config_path: str = "configs/default_config.yaml", seeds: list =
         print(f"{method:<20} | {nmse_str:<18} | {range_str:<18} | {res['flops']:<12d} | {lat_str:<15}")
     print("=" * 85 + "\n")
     
-    # Save CSV
     os.makedirs("results", exist_ok=True)
     csv_path = "results/main_results.csv"
     with open(csv_path, "w", newline="") as f:
