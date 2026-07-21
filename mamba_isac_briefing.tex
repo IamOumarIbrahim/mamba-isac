@@ -1,0 +1,244 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\begin{document}
+
+\title{Selective State-Space Modeling for Joint Channel Estimation in OFDM-Based Integrated Sensing and Communication: A Mamba-ISAC Framework\\
+\large{\textcolor{gray}{[RESEARCH PLAN / BRIEFING DOCUMENT --- NOT A RESULTS PAPER]}}}
+
+\author{
+\IEEEauthorblockN{[Author Name(s)]}
+\IEEEauthorblockA{[Affiliation] \\ [Email]}
+}
+
+\maketitle
+
+\begin{abstract}
+Integrated sensing and communication (ISAC) is a foundational pillar of sixth-generation (6G) networks, unifying radar-class environmental sensing with high-throughput data links on a shared waveform. A central bottleneck in ISAC systems is joint channel estimation: the communication channel and the sensing (target) channel are physically coupled and must be tracked jointly and rapidly under user and target mobility. Existing solutions rely on classical linear estimators (LMMSE), which do not exploit temporal structure, or on Transformer-based deep networks, whose quadratic self-attention complexity limits scalability to long pilot sequences and real-time deployment. Selective state-space models (SSMs), and Mamba in particular, have recently demonstrated linear-time sequence modeling with input-dependent state transitions, achieving superior channel-tracking accuracy at a fraction of the computational cost of Transformers in single-function (communication-only) massive MIMO settings. This proposal outlines Mamba-ISAC, a selective state-space architecture for joint communication-channel and target-parameter (range, Doppler) estimation in OFDM-based monostatic ISAC systems. We formulate the joint estimation task as a sequential dual-domain modeling problem, describe a dual-head Mamba backbone for simultaneous CSI and sensing-parameter recovery, and detail a complete evaluation plan against LMMSE and Transformer baselines under a synthetic OFDM-ISAC channel generator. To the best of our knowledge, no prior work applies selective SSMs to the joint ISAC channel estimation problem; this document specifies the system model, architecture, and experimental protocol required to close that gap.
+\end{abstract}
+
+\begin{IEEEkeywords}
+integrated sensing and communication, ISAC, channel estimation, Mamba, state-space models, 6G, massive MIMO
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Sixth-generation (6G) wireless networks are expected to unify environmental sensing and data communication on shared spectrum, hardware, and waveforms through integrated sensing and communication (ISAC) \cite{rohde_isac, shtaiwi_otfs_survey}. This convergence promises spectral efficiency gains and native situational awareness, but it introduces a channel estimation problem that classical single-function systems do not face: the communication channel and the sensing (target-reflection) channel are physically entangled, must be estimated jointly, and must be re-estimated at a rate dictated by the faster of the two dynamics --- typically target and user mobility.
+
+Two families of solutions dominate current practice. Classical linear estimators such as minimum mean-squared error (MMSE) processing are robust and well understood, but treat each pilot snapshot largely independently and do not exploit temporal correlation across snapshots \cite{bjornson_mmse_cellfree}. Deep-learning estimators, particularly Transformer-based architectures, capture long-range dependencies across subcarriers and time but incur quadratic computational complexity in sequence length, which becomes a genuine deployment bottleneck as pilot sequences lengthen under high mobility \cite{xu_transformer_csi, bi_conv_transformer}. A recent and separate line of ISAC-specific work uses conditional denoising diffusion combined with a multimodal Transformer to fuse sensing and location information into channel estimates, reporting meaningful gains over LS and MMSE \cite{farzanullah_isac_diffusion} --- but iterative diffusion sampling adds inference latency that is difficult to reconcile with ISAC's real-time sensing requirement.
+
+Selective state-space models (SSMs), popularized by Mamba \cite{gu_mamba}, offer a third path: linear-time sequence modeling with input-dependent (selective) state transitions and a continuous-time inductive bias that is naturally suited to physical channel dynamics. Within communication-only massive MIMO channel estimation and prediction, Mamba-based architectures have already demonstrated accuracy and efficiency advantages over both MMSE and Transformer baselines \cite{mambanet, cpmamba, channelmamba, mambacsp}. No prior work, to our knowledge, has extended selective SSMs to the joint sensing-communication channel estimation problem that ISAC specifically requires.
+
+This document is a research plan, not a results paper: it specifies the problem, the proposed architecture, and the full experimental protocol prior to implementation. The contributions of the planned work are:
+
+\begin{itemize}
+\item A formulation of joint ISAC channel estimation (communication CSI plus target range/Doppler) as a single sequential dual-domain modeling problem suited to selective SSMs.
+\item Mamba-ISAC, a dual-head selective state-space architecture that shares a single linear-time backbone between the communication and sensing estimation tasks.
+\item A synthetic OFDM-ISAC evaluation protocol benchmarking Mamba-ISAC against LMMSE and a Transformer-based estimator on estimation accuracy, computational complexity, and inference latency.
+\item An explicit scope statement and limitations discussion, since this is a first-stage single-target, single-waveform study.
+\end{itemize}
+
+The remainder of this document is organized as follows. Section II reviews related work across deep-learning channel estimation, SSM-based channel estimation, and ISAC-specific channel estimation. Section III defines the system model. Section IV describes the proposed Mamba-ISAC architecture. Section V specifies the experimental plan. Section VI positions the expected contribution against prior work. Section VII gives an implementation timeline, and Section VIII concludes with scope and limitations.
+
+\section{Related Work}
+
+\subsection{Deep Learning for Channel Estimation}
+Transformer-based estimators exploit self-attention to capture long-range correlations across subcarriers and antennas, improving on convolutional and residual baselines for OFDM and RIS-aided channel estimation \cite{xu_transformer_csi, bi_conv_transformer}. Their principal limitation is quadratic complexity in sequence length, which constrains scalability to large subcarrier counts, large arrays, and long pilot histories --- precisely the regime that high-mobility 6G and ISAC deployments require.
+
+\subsection{Selective State-Space Models for Wireless Channels}
+Mamba's selective SSM formulation \cite{gu_mamba} replaces attention with input-dependent linear recurrences, giving linear-time inference without a key-value cache. Applied to communication-only channel prediction and estimation, this has produced several recent architectures: MambaNet, a bidirectional selective-scan network for OFDM subcarrier channel estimation that outperforms MMSE at high SNR with fewer parameters than Transformer baselines \cite{mambanet}; CPMamba, a residual Mamba stack for MIMO channel prediction under 3GPP standard channel models, achieving state-of-the-art prediction accuracy with roughly half the parameters of prior baselines \cite{cpmamba}; ChannelMamba, a dual-domain (frequency and delay) Mamba architecture for high-mobility massive MIMO channel prediction \cite{channelmamba}; and MambaCSP, a hybrid Mamba-attention architecture reporting 9--12\% accuracy gains over LLM-based CSI predictors alongside substantially lower VRAM use and inference latency \cite{mambacsp}. This body of work establishes Mamba's advantage over both MMSE and Transformer baselines for single-function channel estimation. None of it addresses the jointly coupled sensing-communication channel that ISAC introduces.
+
+\subsection{Channel Estimation for ISAC Systems}
+ISAC-specific channel estimation is comparatively young. Farzanullah et al.\ propose a conditional denoising diffusion model fused with a multimodal Transformer to incorporate sensing and location information into cell-free ISAC channel estimates, reporting 8--9 dB NMSE gains over LS/MMSE \cite{farzanullah_isac_diffusion}. Other ISAC work addresses channel parameter estimation via ray tracing and per-path CSI imaging \cite{bazzi_isac_imaging} or tensor-based near-field parameter estimation \cite{isac_tensor_nearfield}, and OTFS-based waveform design surveys discuss ISAC channel estimation at the waveform level rather than the estimator-architecture level \cite{shtaiwi_otfs_survey}. Across this literature, no architecture applies selective state-space modeling to the joint ISAC estimation problem --- the specific gap this proposal targets.
+
+\subsection{Traditional Linear Estimators}
+LMMSE/MMSE estimation remains the standard production baseline in both cellular and cell-free massive MIMO deployments due to its closed-form tractability and robustness \cite{bjornson_mmse_cellfree}. It is retained here as the classical baseline against which any learned estimator must demonstrate a clear, quantified advantage.
+
+\section{System Model}
+
+Consider a monostatic OFDM-based ISAC base station equipped with $N_t$ transmit and $N_r$ receive antennas, serving a single communication user while simultaneously illuminating a single point-like sensing target. Let $N_c$ denote the number of OFDM subcarriers and $T$ the number of time slots (OFDM symbols) in an estimation window.
+
+\textbf{Communication channel.} The frequency-domain communication channel at subcarrier $k$ and time slot $t$ is denoted $\mathbf{H}_{c}[k,t] \in \mathbb{C}^{N_r \times N_t}$, generated from a time-correlated Rician fading model to capture line-of-sight-dominated 6G scenarios, with Doppler shift $\nu_c$ induced by user mobility.
+
+\textbf{Sensing (target) channel.} The round-trip radar channel is parameterized by target range $R$, radial velocity $v$ (inducing Doppler shift $\nu_s = 2v f_c / c$), and angle of arrival $\theta$. The received echo at subcarrier $k$, time slot $t$ is
+\begin{equation}
+y_s[k,t] = \alpha \, e^{-j2\pi k \Delta f \, \tau} e^{j2\pi t T_s \, \nu_s} \, \mathbf{a}_r(\theta) \mathbf{a}_t^{T}(\theta) \, x[k,t] + n[k,t]
+\label{eq:sensing_echo}
+\end{equation}
+where $\alpha$ is the complex target reflectivity, $\tau = 2R/c$ the round-trip delay, $\Delta f$ the subcarrier spacing, $T_s$ the OFDM symbol duration, $\mathbf{a}_r(\cdot), \mathbf{a}_t(\cdot)$ the receive/transmit steering vectors, $x[k,t]$ the transmitted ISAC symbol, and $n[k,t]$ additive noise.
+
+\textbf{Joint estimation target.} At each time slot $t$, the estimator must recover the joint state
+\begin{equation}
+\mathbf{s}_t = \big[\, \text{vec}(\mathbf{H}_c[:,t]),\ R_t,\ \nu_{s,t}\, \big]
+\label{eq:joint_state}
+\end{equation}
+from noisy pilot observations, given the pilot structure and observation history $\{\mathbf{y}[:,1{:}t]\}$. Pilot subcarrier placement follows a comb pattern shared between the communication and sensing functions, consistent with standard ISAC waveform designs.
+
+\section{Proposed Mamba-ISAC Framework}
+
+\subsection{Overview}
+Mamba-ISAC (Fig.~\ref{fig:architecture}, placeholder) consists of: (i) a dual-domain input embedding stage, (ii) a shared selective-SSM backbone, and (iii) two lightweight output heads --- one for communication CSI, one for target range/Doppler regression.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{placeholder_architecture.pdf}
+\caption{Proposed Mamba-ISAC architecture (to be produced): dual-domain embedding $\rightarrow$ shared selective-SSM backbone $\rightarrow$ dual estimation heads.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Dual-Domain Input Embedding}
+Following the dual-domain design used in ChannelMamba \cite{channelmamba}, raw pilot observations are embedded jointly in the frequency domain (subcarrier-indexed CSI) and the delay-Doppler domain (range/velocity-indexed sensing echo), producing a token sequence $\mathbf{z}_1, \dots, \mathbf{z}_T$ suitable for sequential SSM processing.
+
+\subsection{Selective State-Space Backbone}
+Each Mamba block updates a continuous-time state $h(t)$ via input-dependent discretized parameters:
+\begin{align}
+h_t &= \bar{A}(z_t)\, h_{t-1} + \bar{B}(z_t)\, z_t \label{eq:ssm_state}\\
+o_t &= C(z_t)\, h_t \label{eq:ssm_output}
+\end{align}
+where $\bar{A}(\cdot), \bar{B}(\cdot), C(\cdot)$ are input-dependent (selective) discretized state-space parameters, computed as in \cite{gu_mamba}. Because channel gains across subcarriers are non-causal, a bidirectional selective scan (forward and reverse) is applied, consistent with the bidirectional treatment adopted in MambaNet \cite{mambanet}, before the two task-specific heads consume the resulting representation. The backbone is shared across both tasks to exploit the physical coupling between the communication and sensing channels rather than modeling them independently.
+
+\subsection{Output Heads and Loss}
+A linear communication head maps backbone output to $\hat{\mathbf{H}}_c[:,t]$; a small regression head maps to $(\hat{R}_t, \hat{\nu}_{s,t})$. Training minimizes a weighted joint loss
+\begin{equation}
+\mathcal{L} = \lambda_c \, \text{NMSE}(\hat{\mathbf{H}}_c, \mathbf{H}_c) + \lambda_s \, \text{MSE}(\hat{R}, R) + \lambda_d \, \text{MSE}(\hat{\nu}_s, \nu_s)
+\label{eq:loss}
+\end{equation}
+with $\lambda_c, \lambda_s, \lambda_d$ tuned via validation-set sweep (values TBD in implementation).
+
+\subsection{Complexity}
+The selective-scan backbone runs in $\mathcal{O}(T)$ per sequence versus $\mathcal{O}(T^2)$ for self-attention in the Transformer baseline, with no key-value cache required at inference, mirroring the efficiency advantage reported for Mamba-based estimators in communication-only settings \cite{mambanet, cpmamba, mambacsp}.
+
+\section{Experimental Plan}
+
+This section specifies the evaluation protocol to be executed after implementation; no results are reported in this document.
+
+\subsection{Waveform and Scenario Scope (recommended defaults)}
+\begin{itemize}
+\item \textbf{Waveform:} OFDM-based ISAC. Chosen over OTFS for this first study because the large majority of directly comparable Mamba channel-estimation baselines \cite{mambanet, cpmamba, mambacsp} and the closest ISAC baseline \cite{farzanullah_isac_diffusion} are OFDM-based, maximizing like-for-like comparability. OTFS-ISAC extension is noted as future work (Section VIII).
+\item \textbf{Sensing scenario:} single monostatic base station, single communication user, single point-like sensing target with range-Doppler estimation. Chosen as the minimal tractable scope that still requires genuine joint sensing-communication modeling; multi-target and multi-cell (cell-free ISAC) extensions are deferred to follow-on work.
+\end{itemize}
+
+\subsection{Channel Generation}
+Fully synthetic, generated in software (no measured dataset dependency for this stage):
+\begin{itemize}
+\item Communication channel: time-correlated Rician fading, 3GPP-style Doppler spectrum, configurable $K$-factor, SNR, and mobility (Doppler) range.
+\item Sensing channel: point-target model per (\ref{eq:sensing_echo}), configurable range, velocity, and radar cross-section (reflectivity magnitude).
+\item Pilot structure: shared comb-pattern ISAC pilots, configurable pilot density.
+\end{itemize}
+
+\subsection{Baselines}
+\begin{itemize}
+\item \textbf{LMMSE:} closed-form linear MMSE estimator, per-snapshot, no temporal modeling.
+\item \textbf{Transformer estimator:} encoder-only self-attention architecture sized to match Mamba-ISAC parameter count, following the design pattern of prior Transformer CSI estimators \cite{xu_transformer_csi, bi_conv_transformer}.
+\end{itemize}
+
+\subsection{Metrics}
+\begin{itemize}
+\item Communication channel: normalized mean-squared error (NMSE).
+\item Sensing: root-mean-squared error (RMSE) on range and Doppler estimates.
+\item Efficiency: floating-point operations (FLOPs), parameter count, measured inference latency.
+\end{itemize}
+
+\subsection{Planned Ablations}
+\begin{itemize}
+\item Sequence-length scaling (pilot history length vs. NMSE and latency).
+\item Mobility sweep (Doppler range vs. estimation accuracy).
+\item Pilot density sweep (overhead vs. accuracy trade-off).
+\item SNR sweep, matched across all three estimators.
+\end{itemize}
+
+\begin{table}[t]
+\caption{Planned Comparison Table Structure (values to be filled after experiments)}
+\label{tab:planned_results}
+\centering
+\begin{tabular}{lccc}
+\toprule
+Method & NMSE (dB) & FLOPs & Latency (ms) \\
+\midrule
+LMMSE & TBD & TBD & TBD \\
+Transformer & TBD & TBD & TBD \\
+Mamba-ISAC (proposed) & TBD & TBD & TBD \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Tooling}
+Python, PyTorch, \texttt{mamba-ssm} reference implementation as backbone starting point, custom OFDM-ISAC synthetic channel generator (to be implemented), standard deep-learning training pipeline with fixed random seeds for reproducibility.
+
+\section{Positioning Against Prior Work}
+
+Table~\ref{tab:positioning} summarizes how the proposed work differs from the closest related papers identified in Section II.
+
+\begin{table}[t]
+\caption{Positioning of Mamba-ISAC Relative to Closest Prior Work}
+\label{tab:positioning}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Work & Waveform & Joint ISAC & SSM-based & Complexity \\
+\midrule
+MambaNet \cite{mambanet} & OFDM & No & Yes & $\mathcal{O}(T)$ \\
+CPMamba \cite{cpmamba} & MIMO-OFDM & No & Yes & $\mathcal{O}(T)$ \\
+ChannelMamba \cite{channelmamba} & MIMO & No & Yes & $\mathcal{O}(T)$ \\
+Diffusion-ISAC \cite{farzanullah_isac_diffusion} & OFDM & Yes & No & Iterative \\
+\textbf{Mamba-ISAC (proposed)} & OFDM & \textbf{Yes} & \textbf{Yes} & $\mathcal{O}(T)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+No identified prior work combines joint sensing-communication estimation with a selective state-space backbone; this is the specific contribution gap this proposal targets.
+
+\section{Implementation Timeline}
+
+\begin{itemize}
+\item \textbf{Weeks 1--2:} Build synthetic OFDM-ISAC channel generator; validate against known LMMSE performance curves.
+\item \textbf{Weeks 3--4:} Implement Mamba-ISAC backbone and dual heads; unit-test against toy sequences.
+\item \textbf{Weeks 5--6:} Implement Transformer baseline at matched parameter count; implement LMMSE baseline.
+\item \textbf{Weeks 7--8:} Run full metric suite and ablations (Section V); tune loss weights.
+\item \textbf{Weeks 9--10:} Analysis, writing, figure generation, paper draft.
+\end{itemize}
+
+\section{Conclusion and Scope Limitations}
+
+This document specifies a research plan for Mamba-ISAC, a selective state-space architecture for joint communication-channel and sensing-parameter estimation in OFDM-based ISAC systems, positioned against LMMSE and Transformer baselines. The identified gap --- no prior application of selective SSMs to jointly coupled ISAC channel estimation --- is genuine as of the literature reviewed in Section II.
+
+Explicit scope limitations for this first stage: single sensing target only (no multi-target association problem); fully synthetic channel data (no measured dataset validation yet); OFDM waveform only (OTFS deferred); single-cell monostatic deployment (cell-free multi-AP ISAC deferred). These are deliberate scoping choices to keep the first study tractable and cleanly attributable to the architectural contribution, with extensions noted as future work rather than omissions.
+
+\begin{thebibliography}{00}
+
+\bibitem{rohde_isac} Rohde \& Schwarz, ``Integrated sensing and communication (ISAC) brings the future to life in 6G,'' Application Note, 2025.
+
+\bibitem{shtaiwi_otfs_survey} E. Shtaiwi, A. Abdelhadi, H. Li, Z. Han, and H. V. Poor, ``Orthogonal Time Frequency Space for Integrated Sensing and Communication: A Survey,'' \textit{arXiv:2402.09637}, 2024.
+
+\bibitem{bjornson_mmse_cellfree} E. Bj\"ornson and L. Sanguinetti, ``Making Cell-Free Massive MIMO Competitive With MMSE Processing and Centralized Implementation,'' \textit{IEEE Trans. Wireless Commun.}, vol. 19, no. 1, pp. 77--90, 2020.
+
+\bibitem{xu_transformer_csi} Y. Xu \textit{et al.}, ``Transformer empowered CSI feedback for massive MIMO systems,'' in \textit{Proc. 30th Wireless and Opt. Commun. Conf. (WOCC)}, IEEE, 2021.
+
+\bibitem{bi_conv_transformer} X. Bi \textit{et al.}, ``A novel approach using convolutional transformer for massive MIMO CSI feedback,'' \textit{IEEE Wireless Commun. Lett.}, vol. 11, 2022.
+
+\bibitem{farzanullah_isac_diffusion} M. Farzanullah, H. Zhang, A. Bin Sediq, A. Afana, and M. Erol-Kantarci, ``Conditional Denoising Diffusion for ISAC Enhanced Channel Estimation in Cell-Free 6G,'' \textit{arXiv:2506.06942}, 2025.
+
+\bibitem{gu_mamba} A. Gu and T. Dao, ``Mamba: Linear-Time Sequence Modeling with Selective State Spaces,'' \textit{arXiv:2312.00752}, 2023.
+
+\bibitem{mambanet} D. Luan \textit{et al.}, ``MambaNet: Mamba-assisted Channel Estimation Neural Network With Attention Mechanism,'' \textit{arXiv:2601.17108}, 2026.
+
+\bibitem{cpmamba} S. Luo, J. Xie, Y. Che, J. Yao, J. Tian, D. Feng, and K. Wu, ``CPMamba: Selective State Space Models for MIMO Channel Prediction in High-Mobility Environments,'' \textit{arXiv:2512.16315}, 2025.
+
+\bibitem{channelmamba} ``ChannelMamba: A Mamba-Driven Selective State-Space Model for Channel Prediction of High-Mobility MIMO in 6G IoT,'' \textit{IEEE Journals \& Magazine}, IEEE Xplore document 11200503.
+
+\bibitem{mambacsp} ``MambaCSP: Hybrid-Attention State Space Models for Hardware-Efficient Channel State Prediction,'' \textit{arXiv:2604.21957}, 2026.
+
+\bibitem{bazzi_isac_imaging} A. Bazzi, M. Ying, O. Kanhere, T. S. Rappaport, and M. Chafii, ``ISAC Imaging by Channel State Information using Ray Tracing for Next Generation 6G,'' \textit{IEEE J. Sel. Topics Electromagn. Antennas Propag. (JSTEAP)}, 2025.
+
+\bibitem{isac_tensor_nearfield} ``Near-Field Channel Parameter Estimation and Localization for mmWave Massive MIMO-OFDM ISAC Systems via Tensor Analysis,'' \textit{PMC}, 2025.
+
+\end{thebibliography}
+
+\end{document}

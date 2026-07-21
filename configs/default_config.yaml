@@ -1,0 +1,55 @@
+# Mamba-ISAC Default Configuration
+
+system:
+  seed: 42
+  device: "cuda" # or "cpu"
+
+dataset:
+  num_subcarriers: 64      # Nc
+  num_time_slots: 16       # T
+  num_tx_antennas: 4       # Nt
+  num_rx_antennas: 4       # Nr
+  carrier_frequency: 28.0e9 # 28 GHz (mmWave)
+  subcarrier_spacing: 120.0e3 # 120 kHz
+  symbol_duration: 8.33e-6   # Ts (approx 1 / SCS)
+  
+comm_channel:
+  k_factor_db: 10.0        # Rician K-factor in dB
+  user_velocity: 15.0      # m/s (approx 54 km/h)
+  snr_db: 15.0            # Operating SNR in dB
+
+sensing_channel:
+  target_range: 50.0       # Meters
+  target_velocity: 20.0    # m/s (approx 72 km/h)
+  reflectivity_mag: 1.0    # Target complex reflectivity magnitude
+  target_azimuth: 0.2618   # Radians (~15 deg)
+
+pilots:
+  pattern: "comb"
+  pilot_spacing: 4         # Pilot every 4th subcarrier
+
+data_splits:
+  num_train: 1000
+  num_val: 200
+  num_test: 200
+  toy_size: 20
+
+model:
+  d_model: 64
+  d_state: 16
+  d_conv: 4
+  expand: 2
+  num_layers: 4
+  dropout: 0.1
+
+loss:
+  lambda_c: 1.0            # Comm NMSE weight
+  lambda_s: 0.1            # Sensing Range MSE weight
+  lambda_d: 0.1            # Sensing Doppler MSE weight
+
+training:
+  batch_size: 32
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  epochs: 50
+  patience: 10
