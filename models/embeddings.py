@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 
 class DualDomainEmbedding(nn.Module):
@@ -7,6 +8,7 @@ class DualDomainEmbedding(nn.Module):
     Dual-Domain Input Embedding stage for Mamba-ISAC.
     Embeds raw complex pilot/sensing observation tensors Y_obs (B, 2, Nr, Nt, Nc, T)
     into sequential d_model token representations Z (B, T, d_model).
+    Supports arbitrary sequence lengths T dynamically.
     """
     def __init__(
         self,
@@ -19,7 +21,7 @@ class DualDomainEmbedding(nn.Module):
     ):
         super().__init__()
         self.Nc = num_subcarriers
-        self.T = num_time_slots
+        self.T_default = num_time_slots
         self.Nt = num_tx_antennas
         self.Nr = num_rx_antennas
         self.d_model = d_model
@@ -41,8 +43,9 @@ class DualDomainEmbedding(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
         
-        # Positional Encoding across time slots T
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.T, d_model))
+        # Initial learned Positional Embedding
+        self.max_pos = 256
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.max_pos, d_model))
         nn.init.trunc_normal_(self.pos_embed, std=0.02)
 
     def forward(self, Y_obs: torch.Tensor) -> torch.Tensor:
@@ -55,19 +58,22 @@ class DualDomainEmbedding(nn.Module):
         B, C_ri, Nr, Nt, Nc, T = Y_obs.shape
         
         # Reshape to (B, T, 2 * Nr * Nt * Nc)
-        # Permute to (B, T, C_ri, Nr, Nt, Nc)
         x_flat = Y_obs.permute(0, 5, 1, 2, 3, 4).reshape(B, T, self.in_dim)
         
         # Frequency domain feature
         z_freq = self.freq_proj(x_flat) # (B, T, d_model)
         
         # Delay-Doppler feature via 1D Conv along T dimension
-        # x_flat for Conv1d needs (B, in_dim, T)
         z_dd = self.delay_doppler_conv(x_flat.permute(0, 2, 1)).permute(0, 2, 1) # (B, T, d_model)
         
         # Fuse dual domains
         z_fused = self.fusion(torch.cat([z_freq, z_dd], dim=-1))
         
-        # Add positional embedding & norm
-        out = self.norm(z_fused + self.pos_embed[:, :T, :])
+        # Add positional embedding dynamically sliced/interpolated
+        if T <= self.max_pos:
+            pos = self.pos_embed[:, :T, :]
+        else:
+            pos = F.interpolate(self.pos_embed.permute(0, 2, 1), size=T, mode='linear', align_corners=False).permute(0, 2, 1)
+            
+        out = self.norm(z_fused + pos)
         return self.dropout(out)
