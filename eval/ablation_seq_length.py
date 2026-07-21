@@ -24,10 +24,10 @@ def run_sequence_length_ablation(config_path: str = "configs/default_config.yaml
     mamba_ckpt = "checkpoints/best_mamba_isac.pt"
     trans_ckpt = "checkpoints/best_transformer_isac.pt"
     
-    seq_lengths = [4, 8, 16, 32, 64]
+    seq_lengths = [4, 8, 16, 32, 64, 128, 256]
     
     results = []
-    print("\nStarting Ablation 1: Sequence-Length Scaling Sweeps (T in [4, 8, 16, 32, 64])...")
+    print("\nStarting Ablation 1: Sequence-Length Scaling Sweeps (T in [4, 8, 16, 32, 64, 128, 256])...")
     
     for T_len in seq_lengths:
         config_t = yaml.safe_load(open(config_path))
@@ -87,7 +87,7 @@ def run_sequence_length_ablation(config_path: str = "configs/default_config.yaml
             'Mamba_NMSE': nmse_mamba, 'Mamba_Lat_ms': lat_mamba
         })
         
-        print(f"T={T_len:2d} | LMMSE NMSE: {nmse_lmmse:.2f} dB | Trans NMSE: {nmse_trans:.2f} dB | Mamba NMSE: {nmse_mamba:.2f} dB")
+        print(f"T={T_len:3d} | LMMSE: {lat_lmmse:.2f} ms | Trans: {lat_trans:.2f} ms | Mamba: {lat_mamba:.2f} ms")
         
     os.makedirs("results", exist_ok=True)
     csv_path = "results/ablation_seq_length.csv"

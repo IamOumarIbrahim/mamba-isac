@@ -3,7 +3,7 @@ from typing import Tuple, Optional
 
 class LMMSEEstimator:
     """
-    Closed-form Linear Minimum Mean-Squared Error (LMMSE) channel estimator
+    Closed-form Centered Linear Minimum Mean-Squared Error (LMMSE) channel estimator
     extended with communication channel cancellation + 2D FFT periodogram for target range and Doppler recovery.
     Pure closed-form estimator with zero learned parameters.
     """
@@ -32,8 +32,13 @@ class LMMSEEstimator:
         self,
         Y_obs: np.ndarray,
         snr_db: float,
-        R_hh: Optional[np.ndarray] = None
+        R_hh: Optional[np.ndarray] = None,
+        mu_h: Optional[np.ndarray] = None
     ) -> np.ndarray:
+        """
+        Estimates full communication channel matrix H_c from noisy observations Y_obs.
+        Uses centered Rician LMMSE estimation: H_hat = mu + C_hp (C_pp + sigma2 * I)^(-1) (Y_p - mu_p)
+        """
         if hasattr(Y_obs, "cpu"):
             Y_obs = Y_obs.cpu().numpy()
             
@@ -43,21 +48,30 @@ class LMMSEEstimator:
         snr_linear = 10.0 ** (snr_db / 10.0)
         sigma2 = 1.0 / snr_linear
         
-        Y_pilots = Y_obs[..., self.pilot_subcarriers, :]
-        H_ls = Y_pilots.copy()
+        # LS estimate on pilot subcarriers
+        Y_pilots = Y_obs[..., self.pilot_subcarriers, :] # (..., Nr, Nt, num_pilots, T)
         
         if R_hh is None:
+            # Empirical / Sinc autocorrelation profile
             k = np.arange(self.Nc)
-            dk = k[:, None] - k[None, :]
-            R_hh = np.sinc(dk * 0.05) + 0.01 * np.eye(self.Nc)
-            
+            dk = np.abs(k[:, None] - k[None, :])
+            R_hh = np.sinc(dk * 0.05) + 1e-4 * np.eye(self.Nc)
+
+        # Centered LMMSE matrix
         R_p = R_hh[self.pilot_subcarriers, :][:, self.pilot_subcarriers]
         R_hp = R_hh[:, self.pilot_subcarriers]
         
-        inv_matrix = np.linalg.inv(R_p + (sigma2 / (self.Nc / self.num_pilots)) * np.eye(self.num_pilots))
+        # Pilot symbol energy scaling factor
+        inv_matrix = np.linalg.inv(R_p + sigma2 * np.eye(self.num_pilots))
         W_lmmse = R_hp @ inv_matrix
         
-        H_lmmse = np.einsum('kp, ...npt->...nkt', W_lmmse, H_ls)
+        if mu_h is not None:
+            mu_p = mu_h[..., self.pilot_subcarriers, :]
+            diff = Y_pilots - mu_p
+            H_lmmse = mu_h + np.einsum('kp, ...npt->...nkt', W_lmmse, diff)
+        else:
+            H_lmmse = np.einsum('kp, ...npt->...nkt', W_lmmse, Y_pilots)
+            
         return H_lmmse
 
     def estimate_sensing_parameters(
@@ -67,10 +81,6 @@ class LMMSEEstimator:
         snr_db: float = 15.0,
         max_search_range: float = 120.0
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Estimates target range R (meters) and target Doppler shift nu_s (Hz)
-        using 2D FFT periodogram within valid range window [0, max_search_range].
-        """
         if hasattr(Y_obs, "cpu"):
             Y_obs = Y_obs.cpu().numpy()
             
@@ -94,18 +104,17 @@ class LMMSEEstimator:
         n_fft_doppler = max(self.T * 8, 512)
         doppler_freqs = np.fft.fftshift(np.fft.fftfreq(n_fft_doppler, d=self.Ts))
         
-        # Max range bin corresponding to max_search_range (120 meters)
         max_bin = int(np.ceil((2.0 * max_search_range * n_fft_range * self.df) / self.c))
         max_bin = min(max_bin, n_fft_range)
         
         for b in range(B):
-            snapshot = Y_residual[b, 0, 0, :, :] # (Nc, T)
+            snapshot = Y_residual[b, 0, 0, :, :]
             
-            delay_profile = np.fft.ifft(snapshot, n=n_fft_range, axis=0) # (n_fft_range, T)
-            rd_map = np.fft.fft(delay_profile, n=n_fft_doppler, axis=1)   # (n_fft_range, n_fft_doppler)
+            delay_profile = np.fft.ifft(snapshot, n=n_fft_range, axis=0)
+            rd_map = np.fft.fft(delay_profile, n=n_fft_doppler, axis=1)
             rd_map = np.fft.fftshift(rd_map, axes=1)
             
-            mag = np.abs(rd_map[:max_bin, :]) # Constrain peak search to valid range window
+            mag = np.abs(rd_map[:max_bin, :])
             range_bin, doppler_bin = np.unravel_index(np.argmax(mag), mag.shape)
             
             est_range = (self.c * range_bin) / (2.0 * n_fft_range * self.df)
