@@ -149,7 +149,8 @@ def main():
     train_dict = generate_isac_samples(config, num_samples=config['data_splits']['num_train'], seed=seed+1)
     val_dict = generate_isac_samples(config, num_samples=config['data_splits']['num_val'], seed=seed+2)
 
-    train_ds = ISACDataset(train_dict)
+    pilot_dropout_rate = config['dataset'].get('pilot_dropout_rate', 0.0)
+    train_ds = ISACDataset(train_dict, is_training=True, pilot_dropout_rate=pilot_dropout_rate)
     val_ds = ISACDataset(val_dict)
 
     batch_size = config['training']['batch_size']
