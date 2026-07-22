@@ -1,0 +1,31 @@
+=======================================================
+Training Mamba-ISAC Model on cuda...
+=======================================================
+Epoch  1/50 | Train Loss: 0.9754 | Val Loss: 0.5532 | Val Comm NMSE: -3.66 dB | Val Range RMSE: 63.63 m | Val Doppler RMSE: 4519.53 Hz
+Epoch  5/50 | Train Loss: 0.1437 | Val Loss: 0.1271 | Val Comm NMSE: -13.07 dB | Val Range RMSE: 9.63 m | Val Doppler RMSE: 4375.08 Hz
+Epoch 10/50 | Train Loss: 0.1062 | Val Loss: 0.0954 | Val Comm NMSE: -14.21 dB | Val Range RMSE: 2.54 m | Val Doppler RMSE: 3778.68 Hz
+Epoch 15/50 | Train Loss: 0.0761 | Val Loss: 0.0671 | Val Comm NMSE: -14.43 dB | Val Range RMSE: 2.26 m | Val Doppler RMSE: 2771.52 Hz
+Epoch 20/50 | Train Loss: 0.0580 | Val Loss: 0.0531 | Val Comm NMSE: -14.50 dB | Val Range RMSE: 2.28 m | Val Doppler RMSE: 2082.29 Hz
+Epoch 25/50 | Train Loss: 0.0521 | Val Loss: 0.0482 | Val Comm NMSE: -14.54 dB | Val Range RMSE: 2.86 m | Val Doppler RMSE: 1787.66 Hz
+Epoch 30/50 | Train Loss: 0.0457 | Val Loss: 0.0416 | Val Comm NMSE: -14.59 dB | Val Range RMSE: 3.17 m | Val Doppler RMSE: 1283.36 Hz
+Epoch 35/50 | Train Loss: 0.0423 | Val Loss: 0.0385 | Val Comm NMSE: -14.68 dB | Val Range RMSE: 2.91 m | Val Doppler RMSE: 1022.03 Hz
+Epoch 40/50 | Train Loss: 0.0407 | Val Loss: 0.0372 | Val Comm NMSE: -14.72 dB | Val Range RMSE: 2.88 m | Val Doppler RMSE: 900.56 Hz
+Epoch 45/50 | Train Loss: 0.0402 | Val Loss: 0.0367 | Val Comm NMSE: -14.74 dB | Val Range RMSE: 2.79 m | Val Doppler RMSE: 851.29 Hz
+Epoch 50/50 | Train Loss: 0.0399 | Val Loss: 0.0366 | Val Comm NMSE: -14.75 dB | Val Range RMSE: 2.76 m | Val Doppler RMSE: 845.29 Hz
+Mamba-ISAC Training finished. Best checkpoint saved to 'checkpoints\best_mamba_isac.pt'.
+
+=======================================================
+Training Transformer Model on cuda...
+=======================================================
+Epoch  1/50 | Train Loss: 1.1453 | Val Loss: 1.1235 | Val Comm NMSE: 0.04 dB | Val Range RMSE: 57.44 m | Val Doppler RMSE: 4514.74 Hz
+Epoch  5/50 | Train Loss: 0.1878 | Val Loss: 0.1464 | Val Comm NMSE: -11.72 dB | Val Range RMSE: 10.64 m | Val Doppler RMSE: 4406.17 Hz
+Epoch 10/50 | Train Loss: 0.1219 | Val Loss: 0.1036 | Val Comm NMSE: -13.90 dB | Val Range RMSE: 3.73 m | Val Doppler RMSE: 3950.65 Hz
+Epoch 15/50 | Train Loss: 0.0889 | Val Loss: 0.0754 | Val Comm NMSE: -14.26 dB | Val Range RMSE: 2.56 m | Val Doppler RMSE: 3065.85 Hz
+Epoch 20/50 | Train Loss: 0.0677 | Val Loss: 0.0571 | Val Comm NMSE: -14.43 dB | Val Range RMSE: 2.25 m | Val Doppler RMSE: 2275.26 Hz
+Epoch 25/50 | Train Loss: 0.0581 | Val Loss: 0.0500 | Val Comm NMSE: -14.54 dB | Val Range RMSE: 2.65 m | Val Doppler RMSE: 1905.01 Hz
+Epoch 30/50 | Train Loss: 0.0542 | Val Loss: 0.0471 | Val Comm NMSE: -14.57 dB | Val Range RMSE: 2.55 m | Val Doppler RMSE: 1726.54 Hz
+Epoch 35/50 | Train Loss: 0.0511 | Val Loss: 0.0443 | Val Comm NMSE: -14.55 dB | Val Range RMSE: 2.93 m | Val Doppler RMSE: 1499.68 Hz
+Epoch 40/50 | Train Loss: 0.0495 | Val Loss: 0.0425 | Val Comm NMSE: -14.60 dB | Val Range RMSE: 2.97 m | Val Doppler RMSE: 1367.75 Hz
+Epoch 45/50 | Train Loss: 0.0487 | Val Loss: 0.0418 | Val Comm NMSE: -14.61 dB | Val Range RMSE: 2.95 m | Val Doppler RMSE: 1319.61 Hz
+Epoch 50/50 | Train Loss: 0.0482 | Val Loss: 0.0417 | Val Comm NMSE: -14.62 dB | Val Range RMSE: 2.92 m | Val Doppler RMSE: 1313.19 Hz
+Transformer Training finished. Best checkpoint saved to 'checkpoints\best_transformer_isac.pt'.
