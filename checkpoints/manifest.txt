@@ -1,0 +1,15 @@
+=== Mamba-ISAC Checkpoint Manifest ===
+File: best_mamba_isac.pt
+SHA-256: 819737ef12d61da39c76f5f37f94497b1c29451314353aa425ebbded8b6327b7
+Size: 12,355,674 bytes (11.78 MB)
+Parameters: 1,020,099 (1.02M)
+Expected Size Arithmetic: 1,020,099 params * 4 bytes/param * 3 (Weights + Adam exp_avg + Adam exp_avg_sq) = 12,241,188 bytes
+Serialization Overhead: 114,486 bytes
+
+=== Transformer-ISAC Checkpoint Manifest ===
+File: best_transformer_isac.pt
+SHA-256: 8e48608ea3ce97a7626a6b0c7b7daac6250947274b9a92df53ec319a82fb2cb8
+Size: 11,912,218 bytes (11.36 MB)
+Parameters: 984,899 (0.98M)
+Expected Size Arithmetic: 984,899 params * 4 bytes/param * 3 (Weights + Adam exp_avg + Adam exp_avg_sq) = 11,818,788 bytes
+Serialization Overhead: 93,430 bytes
