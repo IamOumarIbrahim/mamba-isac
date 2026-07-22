@@ -119,10 +119,10 @@ where $\bar{A}(\cdot), \bar{B}(\cdot), C(\cdot)$ are selective state-space param
 
 \subsection{Output Heads and Joint Loss}
 A linear communication head predicts residual CSI corrections $\Delta \mathbf{H}$ resulting in $\hat{\mathbf{H}}_c = Y_{\text{obs}} + \Delta \mathbf{H}$; an attention-pooled regression head predicts range $\hat{R}$ and Doppler $\hat{\nu}_s$. Training minimizes normalized joint loss:
-\begin{equation}
-\mathcal{L} = \lambda_c \, \text{NMSE}(\hat{\mathbf{H}}_c, \mathbf{H}_c) + \lambda_s \, \text{MSE}_{\text{norm}}(\hat{R}, R) + \lambda_d \, \text{MSE}_{\text{norm}}(\hat{\nu}_s, \nu_s)
+\begin{multline}
+\mathcal{L} = \lambda_c \, \text{NMSE}(\hat{\mathbf{H}}_c, \mathbf{H}_c) + \lambda_s \, \text{MSE}_{\text{norm}}(\hat{R}, R) \\ + \lambda_d \, \text{MSE}_{\text{norm}}(\hat{\nu}_s, \nu_s)
 \label{eq:loss}
-\end{equation}
+\end{multline}
 
 \section{Experimental Results}
 
@@ -130,6 +130,7 @@ A linear communication head predicts residual CSI corrections $\Delta \mathbf{H}
 \caption{Main Benchmark Accuracy and Compute (15 dB SNR, Mean $\pm$ Std across 3 Seeds)}
 \label{tab:main_results}
 \centering
+\resizebox{\columnwidth}{!}{
 \begin{tabular}{lcccc}
 \toprule
 Method & Comm NMSE (dB) & Range RMSE (m) & FLOPs & Parameters \\
@@ -139,6 +140,7 @@ Transformer & -14.64 $\pm$ 0.02 & 3.36 $\pm$ 0.21 & 2.92e7 & 0.98M \\
 \textbf{Mamba-ISAC} & \textbf{-14.77 $\pm$ 0.00} & 2.58 $\pm$ 0.09 & 4.08e7 & 1.02M \\
 \bottomrule
 \end{tabular}
+}
 \end{table}
 
 \subsection{Benchmark Comparison}
@@ -187,7 +189,7 @@ Fig.~\ref{fig:mobility} demonstrates the deep estimators' robustness under varyi
 
 \section{Conclusion}
 
-This paper presented Mamba-ISAC, a selective state-space architecture for joint channel and target parameter estimation in OFDM ISAC systems. Experimental results demonstrate that Mamba-ISAC achieves superior communication channel estimation accuracy ($-14.77\text{ dB}$ NMSE) compared to parameter-matched Transformer ($-14.64\text{ dB}$) and LMMSE ($-6.72\text{ dB}$) baselines by learning residual echo interference cancellation. Future work includes multi-target clutter extensions and native CUDA kernel compilation.
+This paper presented Mamba-ISAC, a selective state-space architecture for joint channel and target parameter estimation in OFDM ISAC systems. Experimental results demonstrate that Mamba-ISAC achieves superior communication channel estimation accuracy ($-14.77\text{ dB}$ NMSE) compared to parameter-matched Transformer ($-14.64\text{ dB}$) and LMMSE ($-6.72\text{ dB}$) baselines by learning residual echo interference cancellation. However, we also identify a critical zero-shot limitation: without explicit training-time augmentation, deep estimators fail catastrophically when generalizing to unseen sparse pilot configurations. Future work includes multi-target clutter extensions, pilot-dropout augmentation, and native CUDA kernel compilation.
 
 \begin{thebibliography}{00}
 \bibitem{rohde_isac} Rohde \& Schwarz, ``Integrated sensing and communication (ISAC) brings the future to life in 6G,'' Application Note, 2025.
