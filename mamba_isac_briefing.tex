@@ -156,7 +156,7 @@ Under SNR sweeps from $-10\text{ dB}$ to $+30\text{ dB}$ (sweeping communication
 \label{fig:nmse_snr}
 \end{figure}
 
-Fig.~\ref{fig:mobility} and Fig.~\ref{fig:pilot} further demonstrate the estimators' robustness under varying user mobility (Doppler shift) and pilot density configurations.
+Fig.~\ref{fig:mobility} demonstrates the deep estimators' robustness under varying user mobility (Doppler shift). Conversely, Fig.~\ref{fig:pilot} highlights a zero-shot generalization limit: when evaluated on sparse pilot configurations they were not explicitly trained on, both Mamba-ISAC and Transformer fail to interpolate the missing data, exhibiting catastrophic performance drops compared to the analytical LMMSE baseline.
 
 \begin{figure}[ht]
 \centering
@@ -168,7 +168,7 @@ Fig.~\ref{fig:mobility} and Fig.~\ref{fig:pilot} further demonstrate the estimat
 \begin{figure}[ht]
 \centering
 \includegraphics[width=0.9\linewidth]{figures/pilot_density_sweep.pdf}
-\caption{Communication NMSE vs Pilot Spacing. Mamba-ISAC maintains accuracy even under sparse pilot configurations.}
+\caption{Communication NMSE vs Pilot Spacing. Without pilot-dropout training augmentation, the neural estimators (Mamba and Transformer) fail to generalize to sparse pilot configurations, highlighting a zero-shot robustness limitation compared to LMMSE.}
 \label{fig:pilot}
 \end{figure}
 
