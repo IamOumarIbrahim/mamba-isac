@@ -187,6 +187,8 @@ Fig.~\ref{fig:mobility} demonstrates the deep estimators' robustness under varyi
 \label{fig:latency}
 \end{figure}
 
+\textbf{Reproducibility}: To ensure rigorous reproducibility, the complete training pipeline, deterministic data generation scripts, evaluation sweeps, and trained model weights are publicly available. Checkpoint files for both the $1.02\text{M}$ parameter Mamba-ISAC and $0.98\text{M}$ parameter Transformer-ISAC are tracked natively alongside a cryptographic SHA-256 manifest to verify parameter counts and byte-level serialization footprints.
+
 \section{Conclusion}
 
 This paper presented Mamba-ISAC, a selective state-space architecture for joint channel and target parameter estimation in OFDM ISAC systems. Experimental results demonstrate that Mamba-ISAC achieves superior communication channel estimation accuracy ($-14.77\text{ dB}$ NMSE) compared to parameter-matched Transformer ($-14.64\text{ dB}$) and LMMSE ($-6.72\text{ dB}$) baselines by learning residual echo interference cancellation. However, we also identify a critical zero-shot limitation: without explicit training-time augmentation, deep estimators fail catastrophically when generalizing to unseen sparse pilot configurations. Future work includes multi-target clutter extensions, pilot-dropout augmentation, and native CUDA kernel compilation.
