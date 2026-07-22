@@ -53,9 +53,18 @@ def run_pilot_density_ablation(config_path: str = "configs/default_config.yaml")
             ckpt = torch.load(trans_ckpt, map_location=device)
             trans_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         trans_model.eval()
+        # Apply pilot mask to Y_obs before feeding it to the networks
         Y_obs = test_ds.Y_obs.to(device)
+        pilot_mask = test_ds.pilot_mask.to(device)
+        
+        # Zero out non-pilot subcarriers: shape of Y_obs is (B, 2, Nr, Nt, Nc, T)
+        # pilot_mask is (Nc, T). We expand it to match Y_obs
+        pilot_mask_expanded = pilot_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
+        Y_obs_masked = Y_obs.clone()
+        Y_obs_masked[~pilot_mask_expanded.expand_as(Y_obs_masked)] = 0.0
+
         with torch.no_grad():
-            H_c_hat_trans, _, _ = trans_model(Y_obs)
+            H_c_hat_trans, _, _ = trans_model(Y_obs_masked)
             
         H_c_true = test_ds.H_c.numpy()
         H_c_hat_trans_np = H_c_hat_trans.cpu().numpy()
@@ -71,7 +80,7 @@ def run_pilot_density_ablation(config_path: str = "configs/default_config.yaml")
             mamba_model.load_state_dict(ckpt['model_state_dict'], strict=False)
         mamba_model.eval()
         with torch.no_grad():
-            H_c_hat_mamba, _, _ = mamba_model(Y_obs)
+            H_c_hat_mamba, _, _ = mamba_model(Y_obs_masked)
             
         H_c_hat_mamba_np = H_c_hat_mamba.cpu().numpy()
         nmse_mamba = compute_nmse_db(

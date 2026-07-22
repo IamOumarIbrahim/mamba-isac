@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from data.comm_channel import CommunicationChannelGenerator
 from data.sensing_channel import SensingChannelGenerator
+from data.pilots import ISACPilotAllocator
 
 def generate_isac_samples(config: Dict[str, Any], num_samples: int = 100, seed: int = 42) -> Dict[str, np.ndarray]:
     """
@@ -41,6 +42,13 @@ def generate_isac_samples(config: Dict[str, Any], num_samples: int = 100, seed: 
     
     snr_db = float(config['comm_channel']['snr_db'])
     
+    pilot_alloc = ISACPilotAllocator(
+        num_subcarriers=Nc,
+        num_time_slots=T,
+        pilot_spacing=int(config['pilots']['pilot_spacing'])
+    )
+    _, pilot_mask = pilot_alloc.get_pilot_indices()
+    
     H_c, H_c_noisy = comm_gen.generate_channel(batch_size=num_samples, snr_db=snr_db)
     
     target_ranges = np.random.uniform(20.0, 100.0, size=num_samples)
@@ -67,6 +75,7 @@ def generate_isac_samples(config: Dict[str, Any], num_samples: int = 100, seed: 
     return {
         'Y_obs': Y_obs,             # Complex (num_samples, Nr, Nt, Nc, T)
         'H_c': H_c,                 # Complex (num_samples, Nr, Nt, Nc, T)
+        'pilot_mask': pilot_mask,   # Boolean (Nc, T)
         'range': target_ranges,     # Float (num_samples,)
         'velocity': target_velocities, # Float (num_samples,)
         'doppler': nu_s_arr         # Float (num_samples,)
@@ -82,6 +91,7 @@ class ISACDataset(Dataset):
         
         self.Y_obs = torch.tensor(Y_real_imag, dtype=torch.float32)
         self.H_c = torch.tensor(H_real_imag, dtype=torch.float32)
+        self.pilot_mask = torch.tensor(data_dict['pilot_mask'], dtype=torch.bool)
         self.range = torch.tensor(data_dict['range'], dtype=torch.float32)
         self.velocity = torch.tensor(data_dict['velocity'], dtype=torch.float32)
         self.doppler = torch.tensor(data_dict['doppler'], dtype=torch.float32)
@@ -93,6 +103,7 @@ class ISACDataset(Dataset):
         return {
             'Y_obs': self.Y_obs[idx],
             'H_c': self.H_c[idx],
+            'pilot_mask': self.pilot_mask,
             'range': self.range[idx],
             'velocity': self.velocity[idx],
             'doppler': self.doppler[idx]
