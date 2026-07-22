@@ -16,10 +16,9 @@ def test_dataset_generation_and_shapes():
     # Verify keys
     assert 'H_c' in data_dict
     assert 'Y_obs' in data_dict
-    assert 'pilot_mask' in data_dict
     assert 'range' in data_dict
     assert 'velocity' in data_dict
-    assert 'doppler_s' in data_dict
+    assert 'doppler' in data_dict
     
     # Check tensor shapes
     Nc = config['dataset']['num_subcarriers']
@@ -29,7 +28,6 @@ def test_dataset_generation_and_shapes():
     
     assert data_dict['H_c'].shape == (num_samples, Nr, Nt, Nc, T)
     assert data_dict['Y_obs'].shape == (num_samples, Nr, Nt, Nc, T)
-    assert data_dict['pilot_mask'].shape == (Nc, T)
     assert data_dict['range'].shape == (num_samples,)
     assert data_dict['velocity'].shape == (num_samples,)
     

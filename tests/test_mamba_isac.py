@@ -75,7 +75,7 @@ def test_overfit_toy_sequence(sample_config):
     Y_obs = batch['Y_obs']
     H_c_true = batch['H_c']
     R_true = batch['range']
-    nu_s_true = batch['doppler_s']
+    nu_s_true = batch['doppler']
     
     # Measure initial loss
     H_c_hat, R_hat, nu_s_hat = model(Y_obs)

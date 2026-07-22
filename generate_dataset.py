@@ -31,10 +31,9 @@ def main():
             save_path,
             H_c=data_dict['H_c'],
             Y_obs=data_dict['Y_obs'],
-            pilot_mask=data_dict['pilot_mask'],
             range=data_dict['range'],
             velocity=data_dict['velocity'],
-            doppler_s=data_dict['doppler_s']
+            doppler=data_dict['doppler']
         )
         print(f"Saved {save_path}")
 

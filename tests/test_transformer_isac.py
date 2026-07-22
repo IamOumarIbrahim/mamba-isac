@@ -53,7 +53,7 @@ def test_transformer_overfit_toy(sample_config):
     Y_obs = batch['Y_obs']
     H_c_true = batch['H_c']
     R_true = batch['range']
-    nu_s_true = batch['doppler_s']
+    nu_s_true = batch['doppler']
     
     H_c_hat, R_hat, nu_s_hat = model(Y_obs)
     initial_loss, _ = loss_fn(H_c_hat, H_c_true, R_hat, R_true, nu_s_hat, nu_s_true)

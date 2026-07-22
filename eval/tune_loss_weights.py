@@ -45,7 +45,7 @@ def tune_loss_weights(config_path: str = "configs/default_config.yaml"):
             Y_obs = val_ds.Y_obs.to(device)
             H_c_true = val_ds.H_c.to(device)
             R_true = val_ds.range.to(device)
-            nu_s_true = val_ds.doppler_s.to(device)
+            nu_s_true = val_ds.doppler.to(device)
             
             H_c_hat, R_hat, nu_s_hat = model(Y_obs)
             total_loss, loss_dict = loss_fn(H_c_hat, H_c_true, R_hat, R_true, nu_s_hat, nu_s_true)

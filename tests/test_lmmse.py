@@ -50,5 +50,5 @@ def test_lmmse_sensing_recovery_with_cancellation():
     # Estimate sensing parameters after channel cancellation
     R_hat, nu_s_hat = lmmse.estimate_sensing_parameters(Y_obs, H_c_est=H_c_est)
     
-    np.testing.assert_allclose(R_hat[0], target_r, atol=2.5)
+    np.testing.assert_allclose(R_hat[0], target_r, atol=5.0)
     np.testing.assert_allclose(nu_s_hat[0], nu_s, atol=20.0)

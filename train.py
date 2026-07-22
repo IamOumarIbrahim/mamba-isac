@@ -56,7 +56,7 @@ def train_single_model(model_name: str, config: dict, train_loader: DataLoader, 
             Y_obs = batch['Y_obs'].to(device)
             H_c_true = batch['H_c'].to(device)
             R_true = batch['range'].to(device)
-            nu_s_true = batch['doppler_s'].to(device)
+            nu_s_true = batch['doppler'].to(device)
 
             optimizer.zero_grad()
             H_c_hat, R_hat, nu_s_hat = model(Y_obs)
@@ -83,7 +83,7 @@ def train_single_model(model_name: str, config: dict, train_loader: DataLoader, 
                 Y_obs = batch['Y_obs'].to(device)
                 H_c_true = batch['H_c'].to(device)
                 R_true = batch['range'].to(device)
-                nu_s_true = batch['doppler_s'].to(device)
+                nu_s_true = batch['doppler'].to(device)
 
                 H_c_hat, R_hat, nu_s_hat = model(Y_obs)
                 loss, loss_dict = loss_fn(H_c_hat, H_c_true, R_hat, R_true, nu_s_hat, nu_s_true)
