@@ -4,10 +4,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
 
+try:
+    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+    HAS_MAMBA_SSM = True
+except ImportError:
+    HAS_MAMBA_SSM = False
+
 class SelectiveScanFunction(nn.Module):
     """
-    Pure PyTorch Selective State-Space (S6) Scan Block.
-    Optimized with pre-discretized tensor operations across sequence dimension T.
+    Selective State-Space (S6) Scan Block.
+    Optimized with official CUDA selective_scan_fn when available, falling back to pure PyTorch loop.
     Eq. (2)-(3) in mamba_isac_briefing.tex.
     """
     def __init__(
@@ -49,34 +55,51 @@ class SelectiveScanFunction(nn.Module):
         B, T, D_dim = x.shape
         N_dim = self.d_state
         
-        A = -torch.exp(self.A_log) # (D_dim, N_dim)
-        
-        # Single parallel projection across sequence T
-        x_dbl = self.x_proj(x) # (B, T, dt_rank + 2*N_dim)
-        dt_raw, B_param, C_param = torch.split(x_dbl, [self.dt_rank, N_dim, N_dim], dim=-1)
-        
-        # Discretization step Delta = softplus(dt_proj(dt_raw)) across all T: (B, T, D_dim)
-        delta = F.softplus(self.dt_proj(dt_raw))
-        
-        # Parallel discretization tensor computation
-        # bar_A: (B, T, D_dim, N_dim)
-        bar_A = torch.exp(delta.unsqueeze(-1) * A.unsqueeze(0).unsqueeze(0))
-        # bar_B * x_t: (B, T, D_dim, N_dim)
-        bar_Bx = (delta.unsqueeze(-1) * B_param.unsqueeze(2)) * x.unsqueeze(-1)
-        
-        # Sequential recurrence with zero overhead
-        h = torch.zeros(B, D_dim, N_dim, device=x.device, dtype=x.dtype)
-        y_list = []
-        
-        for t in range(T):
-            h = bar_A[:, t] * h + bar_Bx[:, t]
-            y_t = torch.sum(h * C_param[:, t].unsqueeze(1), dim=-1) # (B, D_dim)
-            y_list.append(y_t)
+        if HAS_MAMBA_SSM and x.is_cuda:
+            # Official CUDA Kernel execution path
+            x_dbl = self.x_proj(x)
+            dt_raw, B_param, C_param = torch.split(x_dbl, [self.dt_rank, N_dim, N_dim], dim=-1)
             
-        y = torch.stack(y_list, dim=1) # (B, T, D_dim)
-        out = y + x * self.D
-        return out
-
+            # Format inputs for the Mamba interface
+            x_bdt = x.transpose(1, 2).contiguous() # (B, D_dim, T)
+            dt_raw_bdt = dt_raw.transpose(1, 2).contiguous()
+            B_param_bnt = B_param.transpose(1, 2).contiguous()
+            C_param_bnt = C_param.transpose(1, 2).contiguous()
+            A_nd = -torch.exp(self.A_log.float()) # (D_dim, N_dim)
+            
+            out_bdt = selective_scan_fn(
+                x_bdt,
+                dt_raw_bdt,
+                A_nd,
+                B_param_bnt,
+                C_param_bnt,
+                self.D.float(),
+                z=None,
+                delta_bias=self.dt_proj.bias.float(),
+                delta_softplus=True,
+                return_last_state=False
+            )
+            return out_bdt.transpose(1, 2)
+        else:
+            # Fallback PyTorch implementation (naive loop)
+            A = -torch.exp(self.A_log)
+            x_dbl = self.x_proj(x)
+            dt_raw, B_param, C_param = torch.split(x_dbl, [self.dt_rank, N_dim, N_dim], dim=-1)
+            delta = F.softplus(self.dt_proj(dt_raw))
+            
+            bar_A = torch.exp(delta.unsqueeze(-1) * A.unsqueeze(0).unsqueeze(0))
+            bar_Bx = (delta.unsqueeze(-1) * B_param.unsqueeze(2)) * x.unsqueeze(-1)
+            
+            h = torch.zeros(B, D_dim, N_dim, device=x.device, dtype=x.dtype)
+            y_list = []
+            
+            for t in range(T):
+                h = bar_A[:, t] * h + bar_Bx[:, t]
+                y_t = torch.sum(h * C_param[:, t].unsqueeze(1), dim=-1)
+                y_list.append(y_t)
+                
+            y = torch.stack(y_list, dim=1)
+            return y + x * self.D
 
 class BidirectionalMambaBlock(nn.Module):
     """

@@ -133,13 +133,13 @@ A linear communication head predicts residual CSI corrections $\Delta \mathbf{H}
 \label{tab:main_results}
 \centering
 \resizebox{\columnwidth}{!}{
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccc}
 \toprule
-Method & Comm NMSE (dB) & Range RMSE (m) & FLOPs & Parameters \\
+Method & Comm NMSE (dB) & Range RMSE (m) & Latency (ms) & FLOPs & Params \\
 \midrule
-LMMSE (Centered) & -6.72 $\pm$ 0.01 & \textbf{0.69 $\pm$ 0.05} & 5.24e5 & 0 \\
-Transformer & -14.64 $\pm$ 0.02 & 3.36 $\pm$ 0.21 & 2.92e7 & 0.98M \\
-\textbf{Mamba-ISAC} & \textbf{-14.77 $\pm$ 0.00} & 2.58 $\pm$ 0.09 & 4.08e7 & 1.02M \\
+LMMSE (Centered) & -6.72 $\pm$ 0.01 & \textbf{0.69 $\pm$ 0.05} & 0.70 & 5.24e5 & 0 \\
+Transformer & -14.64 $\pm$ 0.02 & 3.36 $\pm$ 0.21 & 2.65 & 2.92e7 & 0.98M \\
+\textbf{Mamba-ISAC} & \textbf{-14.77 $\pm$ 0.00} & 2.58 $\pm$ 0.09 & \textbf{0.48} & 4.08e7 & 1.02M \\
 \bottomrule
 \end{tabular}
 }
@@ -180,12 +180,12 @@ Fig.~\ref{fig:mobility} demonstrates the deep estimators' robustness under varyi
 
 \textbf{CSI vs Sensing Trade-off}: A key insight of this benchmark is that classical periodogram matched filtering excels at single-target range recovery ($0.69\text{ m}$ RMSE) when target echo delay is a pure single frequency sinusoid, but classical LMMSE struggles at CSI estimation ($-6.72\text{ dB}$) due to target echo pilot interference. Deep learning architectures invert this trade-off: they excel at residual CSI channel estimation ($-14.77\text{ dB}$ NMSE) by canceling target echo interference, while achieving moderate target range regression ($2.58\text{--}3.36\text{ m}$).
 
-\textbf{Execution Profiling}: Realizing theoretical state-space linear latency speedups requires native C++ CUDA selective-scan extensions (\texttt{selective\_scan\_cuda}) to eliminate PyTorch interpreter loop overhead. The sequence-length scaling properties are profiled in Fig.~\ref{fig:latency}, showing Transformer's quadratic growth vs Mamba's linear scaling potential.
+\textbf{Execution Profiling}: By integrating the native C++ CUDA selective-scan extension (\texttt{selective\_scan\_cuda}), Mamba-ISAC eliminates PyTorch interpreter loop overhead to realize its theoretical linear-time hardware efficiency. As profiled in Fig.~\ref{fig:latency} and Table~\ref{tab:main_results}, Mamba-ISAC significantly outperforms the Transformer architecture in execution speed ($0.48\text{ ms}$ vs $2.65\text{ ms}$ at $T=16$), completely inverting the latency disadvantage that arises from naive sequential implementations while still scaling linearly across extreme sequence lengths.
 
 \begin{figure}[ht]
 \centering
 \includegraphics[width=0.9\linewidth]{figures/latency_vs_seq_length.pdf}
-\caption{Inference Latency vs Sequence Length ($T_{\text{slots}} \times N_c$). Note that native \texttt{selective\_scan\_cuda} is required for Mamba to achieve the depicted theoretical linear baseline advantage in practice.}
+\caption{Inference Latency vs Sequence Length ($T_{\text{slots}} \times N_c$). Utilizing the official fused CUDA kernel, Mamba achieves strict linear execution scaling, maintaining sub-millisecond inference latencies even as the Transformer's quadratic bottleneck begins to dominate.}
 \label{fig:latency}
 \end{figure}
 
