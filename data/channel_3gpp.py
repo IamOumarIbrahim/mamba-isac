@@ -2,7 +2,7 @@ import numpy as np
 
 class Channel3GPPGenerator:
     """
-    Simplified 3GPP TR 38.901 TDL (Tapped Delay Line) / CDL channel model generator stub.
+    Simplified TDL-style multi-path fading channel model generator.
     Generates multi-path fading channels following a statistical delay profile.
     """
     def __init__(

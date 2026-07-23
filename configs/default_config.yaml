@@ -23,6 +23,7 @@ sensing_channel:
   target_velocity: 20.0    # m/s (approx 72 km/h)
   reflectivity_mag: 1.0    # Target complex reflectivity magnitude
   target_azimuth: 0.2618   # Radians (~15 deg)
+  include_clutter: false   # Multi-path clutter component (set true to enable)
 
 pilots:
   pattern: "comb"

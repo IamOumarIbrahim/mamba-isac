@@ -12,7 +12,6 @@ from data.dataset import generate_isac_samples, ISACDataset
 from models.mamba_isac import MambaISAC
 from baselines.transformer_isac import TransformerISAC
 from baselines.lmmse import LMMSEEstimator
-from baselines.mamba_variants import MambaNet, CPMamba, ChannelMamba, MambaCSP
 from eval.metrics import compute_nmse_db, compute_rmse, measure_inference_latency
 from utils.flops import estimate_flops, count_parameters
 from utils.seed import set_seed
@@ -44,10 +43,6 @@ def run_main_evaluation(config_path: str = "configs/default_config.yaml", seeds:
     all_seed_results = {
         'LMMSE': {'nmse': [], 'r_rmse': []},
         'Transformer': {'nmse': [], 'r_rmse': []},
-        'MambaNet': {'nmse': [], 'r_rmse': []},
-        'CPMamba': {'nmse': [], 'r_rmse': []},
-        'ChannelMamba': {'nmse': [], 'r_rmse': []},
-        'MambaCSP': {'nmse': [], 'r_rmse': []},
         'Mamba-ISAC': {'nmse': [], 'r_rmse': []}
     }
 
@@ -95,33 +90,25 @@ def run_main_evaluation(config_path: str = "configs/default_config.yaml", seeds:
         all_seed_results['Transformer']['nmse'].append(nmse_trans)
         all_seed_results['Transformer']['r_rmse'].append(r_rmse_trans)
         
-        # 3. Mamba-ISAC and Variants
-        mamba_variants = {
-            'MambaNet': MambaNet(config).to(device),
-            'CPMamba': CPMamba(config).to(device),
-            'ChannelMamba': ChannelMamba(config).to(device),
-            'MambaCSP': MambaCSP(config).to(device),
-            'Mamba-ISAC': MambaISAC(config).to(device)
-        }
+        # 3. Mamba-ISAC
+        mamba_model = MambaISAC(config).to(device)
+        if os.path.exists(mamba_ckpt):
+            ckpt = torch.load(mamba_ckpt, map_location=device, weights_only=False)
+            mamba_model.load_state_dict(ckpt['model_state_dict'], strict=False)
+        mamba_model.eval()
         
-        for name, mamba_model in mamba_variants.items():
-            if name == 'Mamba-ISAC' and os.path.exists(mamba_ckpt):
-                ckpt = torch.load(mamba_ckpt, map_location=device, weights_only=False)
-                mamba_model.load_state_dict(ckpt['model_state_dict'], strict=False)
+        with torch.no_grad():
+            H_c_hat_mamba, R_mamba, _ = mamba_model(Y_obs)
             
-            mamba_model.eval()
-            with torch.no_grad():
-                H_c_hat_mamba, R_mamba, _ = mamba_model(Y_obs)
-                
-            H_c_hat_mamba_np = H_c_hat_mamba.cpu().numpy()
-            nmse_mamba = compute_nmse_db(
-                H_c_hat_mamba_np[:, 0] + 1j * H_c_hat_mamba_np[:, 1],
-                H_c_true[:, 0] + 1j * H_c_true[:, 1]
-            )
-            r_rmse_mamba = compute_rmse(R_mamba, test_ds.range)
-            
-            all_seed_results[name]['nmse'].append(nmse_mamba)
-            all_seed_results[name]['r_rmse'].append(r_rmse_mamba)
+        H_c_hat_mamba_np = H_c_hat_mamba.cpu().numpy()
+        nmse_mamba = compute_nmse_db(
+            H_c_hat_mamba_np[:, 0] + 1j * H_c_hat_mamba_np[:, 1],
+            H_c_true[:, 0] + 1j * H_c_true[:, 1]
+        )
+        r_rmse_mamba = compute_rmse(R_mamba, test_ds.range)
+        
+        all_seed_results['Mamba-ISAC']['nmse'].append(nmse_mamba)
+        all_seed_results['Mamba-ISAC']['r_rmse'].append(r_rmse_mamba)
 
     # Compute FLOPs and parameters
     dummy_input = torch.randn(1, 2, config['dataset']['num_rx_antennas'], config['dataset']['num_tx_antennas'], config['dataset']['num_subcarriers'], config['dataset']['num_time_slots']).to(device)
@@ -137,18 +124,12 @@ def run_main_evaluation(config_path: str = "configs/default_config.yaml", seeds:
     print(f"{'Method':<20} | {'Comm NMSE (dB)':<18} | {'Range RMSE (m)':<18} | {'FLOPs':<12} | {'Params':<10}")
     print("-" * 80)
 
-    for method in ['LMMSE', 'Transformer', 'MambaNet', 'CPMamba', 'ChannelMamba', 'MambaCSP', 'Mamba-ISAC']:
+    for method in ['LMMSE', 'Transformer', 'Mamba-ISAC']:
         nmse_m, nmse_s = np.mean(all_seed_results[method]['nmse']), np.std(all_seed_results[method]['nmse'])
         r_m, r_s = np.mean(all_seed_results[method]['r_rmse']), np.std(all_seed_results[method]['r_rmse'])
         
-        if method == 'LMMSE':
-            flops, params = flops_lmmse, 0
-        elif method == 'Transformer':
-            flops, params = flops_trans, count_parameters(trans_model)
-        elif method == 'Mamba-ISAC':
-            flops, params = flops_mamba, count_parameters(mamba_variants['Mamba-ISAC'])
-        else:
-            flops, params = estimate_flops(mamba_variants[method], dummy_input), count_parameters(mamba_variants[method])
+        flops = flops_lmmse if method == 'LMMSE' else (flops_trans if method == 'Transformer' else flops_mamba)
+        params = 0 if method == 'LMMSE' else (count_parameters(trans_model) if method == 'Transformer' else count_parameters(mamba_model))
         
         summary.append({
             'Method': method,

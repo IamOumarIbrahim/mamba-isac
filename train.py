@@ -54,6 +54,10 @@ def train_single_model(model_name: str, config: dict, train_loader: DataLoader, 
 
         for batch in train_loader:
             Y_obs = batch['Y_obs'].to(device)
+            pilot_mask = batch['pilot_mask'].to(device)
+            pilot_mask_exp = pilot_mask.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+            Y_obs = Y_obs * pilot_mask_exp
+
             H_c_true = batch['H_c'].to(device)
             R_true = batch['range'].to(device)
             nu_s_true = batch['doppler'].to(device)
@@ -81,6 +85,10 @@ def train_single_model(model_name: str, config: dict, train_loader: DataLoader, 
         with torch.no_grad():
             for batch in val_loader:
                 Y_obs = batch['Y_obs'].to(device)
+                pilot_mask = batch['pilot_mask'].to(device)
+                pilot_mask_exp = pilot_mask.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+                Y_obs = Y_obs * pilot_mask_exp
+
                 H_c_true = batch['H_c'].to(device)
                 R_true = batch['range'].to(device)
                 nu_s_true = batch['doppler'].to(device)
