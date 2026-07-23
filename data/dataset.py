@@ -55,10 +55,15 @@ def generate_isac_samples(config: Dict[str, Any], num_samples: int = 100, seed: 
     snr_db = float(config['comm_channel']['snr_db'])
     waveform = config['dataset'].get('waveform', 'ofdm')
     
+    pilot_pattern = config['pilots'].get('pattern', 'comb')
+    if waveform == 'otfs' and 'pattern' not in config['pilots']:
+        pilot_pattern = 'impulse'
+
     pilot_alloc = ISACPilotAllocator(
         num_subcarriers=Nc,
         num_time_slots=T,
-        pilot_spacing=int(config['pilots']['pilot_spacing'])
+        pilot_spacing=int(config['pilots']['pilot_spacing']),
+        pattern=pilot_pattern
     )
     _, pilot_mask = pilot_alloc.get_pilot_indices()
     

@@ -6,20 +6,32 @@ class ISACPilotAllocator:
     Allocates shared comb-pattern pilot subcarriers and time slots for ISAC system.
     Supports variable pilot density and verifies non-overlapping pilot masks.
     """
-    def __init__(self, num_subcarriers: int = 64, num_time_slots: int = 16, pilot_spacing: int = 4):
+    def __init__(self, num_subcarriers: int = 64, num_time_slots: int = 16, pilot_spacing: int = 4, pattern: str = "comb", delay_guard: int = 4, doppler_guard: int = 2):
         self.Nc = num_subcarriers
         self.T = num_time_slots
         self.pilot_spacing = pilot_spacing
+        self.pattern = pattern
+        self.delay_guard = delay_guard
+        self.doppler_guard = doppler_guard
         
     def get_pilot_indices(self) -> Tuple[np.ndarray, np.ndarray]:
         """
         Returns:
-            pilot_subcarriers: 1D array of pilot subcarrier indices
+            pilot_subcarriers: 1D array of pilot subcarrier/delay indices
             pilot_mask: 2D boolean array of shape (Nc, T) where True indicates a pilot location
         """
-        pilot_subcarriers = np.arange(0, self.Nc, self.pilot_spacing)
         pilot_mask = np.zeros((self.Nc, self.T), dtype=bool)
-        pilot_mask[pilot_subcarriers, :] = True
+        
+        if self.pattern == "impulse":
+            # Delay-Doppler OTFS impulse pilot at grid center with guard region
+            kp, lp = self.Nc // 2, self.T // 2
+            pilot_mask[kp, lp] = True
+            pilot_subcarriers = np.array([kp])
+        else:
+            # Standard OFDM comb pattern
+            pilot_subcarriers = np.arange(0, self.Nc, self.pilot_spacing)
+            pilot_mask[pilot_subcarriers, :] = True
+            
         return pilot_subcarriers, pilot_mask
 
     def allocate_pilots(self, batch_size: int = 1) -> np.ndarray:
